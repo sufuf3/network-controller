@@ -29,6 +29,7 @@ service NetworkControl {
   rpc ConnectBridge (ConnectBridgeRequest) returns (Response) {}
 
   rpc ConfigureIface (ConfigureIfaceRequest) returns (Response) {}
+  rpc ConfigureSriovIface (ConfigureSriovIfaceRequest) returns (Response) {}
 
   // Will be deprecated in the future
   rpc AddRoute (AddRouteRequest) returns (Response) {}
@@ -165,6 +166,14 @@ message ConfigureIfaceRequest {
   string path = 1;
   string CIDR = 2;
   string containerVethName = 3;
+}
+
+message ConfigureSriovIfaceRequest {
+  string path = 1;
+  string PodUUID = 2;
+  string If0 = 3;
+  string CIDR = 4;
+  string containerVethName = 5;
 }
 
 message AddRouteRequest {

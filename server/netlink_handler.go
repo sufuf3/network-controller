@@ -13,6 +13,7 @@ import (
 	"github.com/containernetworking/plugins/pkg/ns"
 	"github.com/linkernetworks/network-controller/docker"
 	"github.com/linkernetworks/network-controller/nl"
+	"github.com/intel/sriov-cni/sriov"
 	"golang.org/x/net/context"
 )
 
@@ -119,6 +120,52 @@ func (s *server) ConnectBridge(ctx context.Context, req *pb.ConnectBridgeRequest
 	}
 
 	log.Println("Add Port Success")
+	return &pb.Response{
+		Success: true,
+		Reason:  "",
+	}, nil
+}
+
+func (s *server) ConfigureSriovIface(ctx context.Context, req *pb.ConfigureSriovIfaceRequest) (*pb.Response, error) {
+	runtime.LockOSThread()
+	log.Println("--- Start to configure interface ---")
+	netns, err := ns.GetNS(req.Path)
+	if err != nil {
+		return &pb.Response{
+			Success: false,
+			Reason:  err.Error(),
+		}, err
+	}
+
+//	if err = sriov.setupVF(n, n.IF0, args.IfName, args.ContainerID, netns); err != nil {
+//		return fmt.Errorf("failed to set up pod interface %q from the device %q: %v", args.IfName, n.IF0, err)
+//	}
+
+	err = netns.Do(func(_ ns.NetNS) error {
+		result := &current.Result{}
+		result.Interfaces = []*current.Interface{{Name: req.ContainerVethName}}
+
+		ipv4, err := types.ParseCIDR(req.CIDR)
+		if err != nil {
+			return err
+		}
+		result.IPs = []*current.IPConfig{
+			{
+				Version:   "4",
+				Interface: current.Int(0),
+				Address:   *ipv4,
+			},
+		}
+
+		return ipam.ConfigureIface(req.ContainerVethName, result)
+	})
+	if err != nil {
+		return &pb.Response{
+			Success: false,
+			Reason:  err.Error(),
+		}, err
+	}
+
 	return &pb.Response{
 		Success: true,
 		Reason:  "",

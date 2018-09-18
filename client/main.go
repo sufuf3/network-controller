@@ -33,6 +33,11 @@ type routeOptions struct {
 	Gateway string `short:"g" long:"gateway" description:"The gateway of the interface subnet"`
 }
 
+// -if0, physical network interface
+type if0Options struct {
+	Name string `long:"if0" description:"The phtsical network interface"`
+}
+
 // -route-gw
 type routeViaGatewayOptions struct {
 	DstCIDRGateway []string `long:"route-gw" description:"The destination network and the gateway of the interface subnet. (for example: 239.0.0.0/4,0.0.0.0)"`
@@ -53,6 +58,7 @@ type clientOptions struct {
 	Server        string                   `short:"s" long:"server" description:"target server address, [ip:port] for TCP or unix://[path] for UNIX" required:"true"`
 	Connect       connectOptions           `group:"connectOptions"`
 	Interface     interfaceOptions         `group:"interfaceOptions" `
+	If0	      if0Options	       `group:"if0Options" `
 	RouteWithGW   routeViaGatewayOptions   `group:"routeViaGatewayOptions" `
 	RouteWithIntf routeViaInterfaceOptions `group:"routeViaInterfaceOptions" `
 	Route         routeOptions             `group:"routeOptions" `
@@ -64,6 +70,7 @@ var parser = flags.NewParser(&options, flags.Default)
 
 func main() {
 	var setCIDR bool
+	var setIf0 bool
 	var setVLANAccessLink bool
 
 	var setRoute bool
@@ -86,6 +93,11 @@ func main() {
 		if !utils.IsValidCIDR(options.Interface.CIDR) {
 			log.Fatalf("CIDR address is invalid: %s", options.Interface.CIDR)
 		}
+	}
+
+	// Verify CIDR address and setCIDR bool
+	if options.If0.Name != "" {
+		setIf0 = true
 	}
 
 	// setVLANAccessLink bool
@@ -198,6 +210,26 @@ func main() {
 		connectBridgeResp.Reason,
 		"Connect bridge",
 	)
+
+	if setIf0 {
+		configureSriovIfaceResp, err := ncClient.ConfigureSriovIface(ctx,
+			&pb.ConfigureSriovIfaceRequest{
+				Path:              findNetworkNamespacePathResp.Path,
+				PodUUID:           options.Pod.UUID,
+				If0:		   options.If0.Name,
+				CIDR:              options.Interface.CIDR,
+				ContainerVethName: options.Connect.Interface,
+			},
+		)
+		if err != nil {
+			log.Fatalf("There is something wrong with setting SR-IOV configure interface: %v", err)
+		}
+		common.CheckFatal(
+			configureSriovIfaceResp.Success,
+			configureSriovIfaceResp.Reason,
+			"Configure SRIOV interface",
+		)
+	}
 
 	if setCIDR {
 		configureIfaceResp, err := ncClient.ConfigureIface(ctx,

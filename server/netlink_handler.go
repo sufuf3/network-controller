@@ -13,7 +13,6 @@ import (
 	"github.com/containernetworking/plugins/pkg/ns"
 	"github.com/linkernetworks/network-controller/docker"
 	"github.com/linkernetworks/network-controller/nl"
-	"github.com/intel/sriov-cni/sriov"
 	"golang.org/x/net/context"
 )
 
@@ -137,9 +136,9 @@ func (s *server) ConfigureSriovIface(ctx context.Context, req *pb.ConfigureSriov
 		}, err
 	}
 
-//	if err = sriov.setupVF(n, n.IF0, args.IfName, args.ContainerID, netns); err != nil {
-//		return fmt.Errorf("failed to set up pod interface %q from the device %q: %v", args.IfName, n.IF0, err)
-//	}
+	if err = nl.SriovSetupVF(req.If0, req.ContainerVethName, req.PodUUID, netns); err != nil {
+		log.Printf("failed to set up pod SRIOV VF interface %q from the device %q: %v", req.ContainerVethName, req.If0, err)
+	}
 
 	err = netns.Do(func(_ ns.NetNS) error {
 		result := &current.Result{}

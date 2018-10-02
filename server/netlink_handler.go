@@ -3,6 +3,7 @@ package main
 import (
 	"log"
 	"runtime"
+	"strings"
 
 	pb "github.com/linkernetworks/network-controller/messages"
 	"github.com/linkernetworks/network-controller/utils"
@@ -135,10 +136,22 @@ func (s *server) ConfigureSriovIface(ctx context.Context, req *pb.ConfigureSriov
 			Reason:  err.Error(),
 		}, err
 	}
+	log.Printf("Get the netns object success: %s", req.Path)
+	log.Printf("%d", int(netns.Fd()))
 
-	if err = nl.SriovSetupVF(req.If0, req.ContainerVethName, req.PodUUID, netns); err != nil {
-		log.Printf("failed to set up pod SRIOV VF interface %q from the device %q: %v", req.ContainerVethName, req.If0, err)
-	}
+//	hostVethName := utils.GenerateVethName(req.PodUUID, req.ContainerVethName)
+//	log.Printf("Host veth name to container interface name %s=%s", hostVethName, req.ContainerVethName)
+
+	nsNumber := strings.Split(req.Path, "/")[5]
+	err = netns.Do(func(hostNS ns.NetNS) error {
+		if err := nl.SriovSetupVF(req.If0, req.ContainerVethName, nsNumber, hostNS); err != nil {
+			log.Printf("failed to set up pod SRIOV VF interface %q from the device %q: %v", req.ContainerVethName, req.If0, err)
+			return err
+		}
+		return nil
+	})
+
+	log.Println("Success setup SRIOV veth")
 
 	err = netns.Do(func(_ ns.NetNS) error {
 		result := &current.Result{}

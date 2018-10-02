@@ -96,16 +96,35 @@ func setSharedVfVlan(ifName string, vfIdx int, vlan int) error {
 	return nil
 }
 
+func moveIfToNetns(ifname string, hostNS ns.NetNS) error {
+
+	hostVeth, err := netlink.LinkByName(ifname)
+	if err != nil {
+		return fmt.Errorf("failed to lookup vf device %v: %q", ifname, err)
+	}
+
+	// move VF device to ns
+	if err = netlink.LinkSetNsFd(hostVeth, int(hostNS.Fd())); err != nil {
+		return fmt.Errorf("failed to move device %v to netns %d: %q", ifname, int(hostNS.Fd()), err)
+	}
+
+	if err = netlink.LinkSetUp(hostVeth); err != nil {
+		return fmt.Errorf("failed to setup netlink device %v %q", ifname, err)
+	}
+
+	return nil
+}
+
 // SriovSetupVF for setup SRIOV VF
-func SriovSetupVF(ifName string, podifName string, cid string, netns ns.NetNS) error {
+func SriovSetupVF(ifName string, podifName string, nsNumber string, netns ns.NetNS) error {
 
 	var vfIdx int
 	var infos []os.FileInfo
 
-	_, err := netlink.LinkByName(ifName)
+/*	_, err := netlink.LinkByName(ifName)
 	if err != nil {
 		return fmt.Errorf("failed to lookup master %q: %v", ifName, err)
-	}
+	}*/
 
 	// get the ifname sriov vf num
 	vfTotal, err := getsriovNumfs(ifName)
@@ -117,6 +136,7 @@ func SriovSetupVF(ifName string, podifName string, cid string, netns ns.NetNS) e
 		return fmt.Errorf("no virtual function in the device %q", ifName)
 	}
 
+	// Select a free VF
 	for vf := 0; vf <= (vfTotal - 1); vf++ {
 		vfDir := fmt.Sprintf("/sys/class/net/%s/device/virtfn%d/net", ifName, vf)
 		if _, err := os.Lstat(vfDir); err != nil {
@@ -161,25 +181,9 @@ func SriovSetupVF(ifName string, podifName string, cid string, netns ns.NetNS) e
 		sort.Sort(LinksByIndex(infos))
 	}
 
-	for i := 1; i <= len(infos); i++ {
-		vfDev, err := netlink.LinkByName(infos[i-1].Name())
-		if err != nil {
-			return fmt.Errorf("failed to lookup vf device %q: %v", infos[i-1].Name(), err)
-		}
-
-		if err = netlink.LinkSetUp(vfDev); err != nil {
-			return fmt.Errorf("failed to setup vf %d device: %v", vfIdx, err)
-		}
-
-		// move VF device to ns
-		if err = netlink.LinkSetNsFd(vfDev, int(netns.Fd())); err != nil {
-			return fmt.Errorf("failed to move vf %d to netns: %v", vfIdx, err)
-		}
-	}
-
 	return netns.Do(func(_ ns.NetNS) error {
 
-		ifName := podifName
+		ifName := "net"+nsNumber
 		for i := 1; i <= len(infos); i++ {
 			if len(infos) == maxSharedVf && i == len(infos) {
 				ifName = podifName + fmt.Sprintf("d%d", i-1)
@@ -188,6 +192,9 @@ func SriovSetupVF(ifName string, podifName string, cid string, netns ns.NetNS) e
 			err := renameLink(infos[i-1].Name(), ifName)
 			if err != nil {
 				return fmt.Errorf("failed to rename %d vf of the device %q to %q: %v", vfIdx, infos[i-1].Name(), ifName, err)
+			}
+			if err = moveIfToNetns(ifName, netns); err != nil {
+				return err
 			}
 
 		}

@@ -50,8 +50,8 @@ type routeViaInterfaceOptions struct {
 
 // -bridge, -nic
 type connectOptions struct {
-	Bridge    string `short:"b" long:"bridge" description:"Target bridge name" required:"true"`
-	Interface string `short:"n" long:"nic" description:"The interface name in the container" required:"true"`
+	Bridge    string `short:"b" long:"bridge" description:"Target bridge name"`
+	Interface string `short:"n" long:"nic" description:"The interface name in the container"`
 }
 
 type clientOptions struct {
@@ -188,29 +188,30 @@ func main() {
 		findNetworkNamespacePathResp.Path,
 	)
 	// Let's connect bridge
-	log.Println(
-		"Try to connect bridge",
-		findNetworkNamespacePathResp.Path,
-		options.Connect.Interface,
-		options.Connect.Bridge,
-	)
-	connectBridgeResp, err := ncClient.ConnectBridge(ctx,
-		&pb.ConnectBridgeRequest{
-			Path:              findNetworkNamespacePathResp.Path,
-			PodUUID:           options.Pod.UUID,
-			ContainerVethName: options.Connect.Interface,
-			BridgeName:        options.Connect.Bridge,
-		},
-	)
-	if err != nil {
-		log.Fatalf("There is something wrong with connect bridge: %v", err)
+	if setIf0 != true {
+		log.Println(
+			"Try to connect bridge",
+			findNetworkNamespacePathResp.Path,
+			options.Connect.Interface,
+			options.Connect.Bridge,
+		)
+		connectBridgeResp, err := ncClient.ConnectBridge(ctx,
+			&pb.ConnectBridgeRequest{
+				Path:              findNetworkNamespacePathResp.Path,
+				PodUUID:           options.Pod.UUID,
+				ContainerVethName: options.Connect.Interface,
+				BridgeName:        options.Connect.Bridge,
+			},
+		)
+		if err != nil {
+			log.Fatalf("There is something wrong with connect bridge: %v", err)
+		}
+		common.CheckFatal(
+			connectBridgeResp.Success,
+			connectBridgeResp.Reason,
+			"Connect bridge",
+		)
 	}
-	common.CheckFatal(
-		connectBridgeResp.Success,
-		connectBridgeResp.Reason,
-		"Connect bridge",
-	)
-
 	if setIf0 {
 		configureSriovIfaceResp, err := ncClient.ConfigureSriovIface(ctx,
 			&pb.ConfigureSriovIfaceRequest{
